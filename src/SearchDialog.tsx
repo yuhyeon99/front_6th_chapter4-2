@@ -113,6 +113,12 @@ const fetchAllLectures = () => {
 }
 
 // TODO: 이 컴포넌트에서 불필요한 연산이 발생하지 않도록 다양한 방식으로 시도해주세요.
+// 지금은 렌더링을 할 때 마다 (인피니트 스크롤을 할 때 마다) 검색을 다시 하고 있습니다. 
+// 최초에 한 번 검색한 이후에는 검색을 다시 하지 않도록 만들어주세요
+  // 1. 최초 로딩 때, 파싱/정규화까지 끝내두기 (비싼 연산을 한 번만)
+  // 2. 필터링 결과는 useMemo(…, [lectures, searchOptions])로 메모이즈
+  // 3. 페이지 증가로 인한 리렌더에서는 filteredLectures 재계산이 없도록 분리
+  // 4. IntersectionObserver는 once-setup로 두고, 마지막 페이지는 ref로 읽기
 const SearchDialog = ({ searchInfo, onClose }: Props) => {
   const { setSchedulesMap } = useScheduleContext();
 
