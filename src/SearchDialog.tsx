@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -160,7 +160,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
       });
   }
 
-  const filteredLectures = getFilteredLectures();
+  const filteredLectures = useMemo(() => getFilteredLectures(), [lectures, searchOptions]);
   const lastPage = Math.ceil(filteredLectures.length / PAGE_SIZE);
   const visibleLectures = filteredLectures.slice(0, page * PAGE_SIZE);
   const allMajors = [...new Set(lectures.map(lecture => lecture.major))];
