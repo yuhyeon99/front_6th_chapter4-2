@@ -162,6 +162,10 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
 
   const filteredLectures = useMemo(() => getFilteredLectures(), [lectures, searchOptions]);
   const lastPage = Math.ceil(filteredLectures.length / PAGE_SIZE);
+  const lastPageRef = useRef(lastPage);
+  useEffect(() => {
+    lastPageRef.current = lastPage
+  }, [lastPage])
   const visibleLectures = filteredLectures.slice(0, page * PAGE_SIZE);
   const allMajors = [...new Set(lectures.map(lecture => lecture.major))];
 
@@ -210,10 +214,12 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
       return;
     }
 
+    // 브라우저 API
     const observer = new IntersectionObserver(
+      // 콜백 함수가 entries라는 인자로 현재 관찰 중인 요소들의 상태를 알려준다.
       entries => {
         if (entries[0].isIntersecting) {
-          setPage(prevPage => Math.min(lastPage, prevPage + 1));
+          setPage(prevPage => Math.min(lastPageRef.current, prevPage + 1));
         }
       },
       { threshold: 0, root: $loaderWrapper }
@@ -221,7 +227,12 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
 
     observer.observe($loader);
 
-    return () => observer.unobserve($loader);
+    return () => observer.disconnect();
+    // Intersection Observer은 한 번만 붙여놓으면 충분한데, [lastPage] 를 넣으면 불필요하게 계속 새로 붙였다 떼는 것
+  }, []);
+
+  useEffect(() => {
+    setPage(prev => Math.min(prev, lastPage));
   }, [lastPage]);
 
   useEffect(() => {
