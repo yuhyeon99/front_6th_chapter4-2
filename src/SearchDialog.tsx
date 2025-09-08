@@ -166,8 +166,8 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
   useEffect(() => {
     lastPageRef.current = lastPage
   }, [lastPage])
-  const visibleLectures = filteredLectures.slice(0, page * PAGE_SIZE);
-  const allMajors = [...new Set(lectures.map(lecture => lecture.major))];
+  const visibleLectures = useMemo(() => filteredLectures.slice(0, page * PAGE_SIZE), [filteredLectures, page]);
+  const allMajors = useMemo(() => [...new Set(lectures.map(lecture => lecture.major))], [lectures]);
 
   const changeSearchOption = (field: keyof SearchOption, value: SearchOption[typeof field]) => {
     setPage(1);
@@ -191,7 +191,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
     }));
 
     onClose();
-  };
+  };allMajors
 
   useEffect(() => {
     const start = performance.now();
