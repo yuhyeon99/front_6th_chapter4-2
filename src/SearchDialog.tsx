@@ -228,8 +228,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
     observer.observe($loader);
 
     return () => observer.disconnect();
-    // Intersection Observer은 한 번만 붙여놓으면 충분한데, [lastPage] 를 넣으면 불필요하게 계속 새로 붙였다 떼는 것
-  }, []);
+  }, [lastPage]);
 
   useEffect(() => {
     setPage(prev => Math.min(prev, lastPage));
