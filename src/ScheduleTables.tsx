@@ -3,6 +3,7 @@ import ScheduleTable from "./ScheduleTable.tsx";
 import { useScheduleContext } from "./ScheduleContext.tsx";
 import SearchDialog from "./SearchDialog.tsx";
 import { useState } from "react";
+import ScheduleDndProvider from "./ScheduleDndProvider.tsx";
 
 export const ScheduleTables = () => {
   const { schedulesMap, setSchedulesMap } = useScheduleContext();
@@ -42,16 +43,21 @@ export const ScheduleTables = () => {
                         onClick={() => remove(tableId)}>삭제</Button>
               </ButtonGroup>
             </Flex>
-            <ScheduleTable
-              key={`schedule-table-${index}`}
-              schedules={schedules}
-              tableId={tableId}
-              onScheduleTimeClick={(timeInfo) => setSearchInfo({ tableId, ...timeInfo })}
-              onDeleteButtonClick={({ day, time }) => setSchedulesMap((prev) => ({
-                ...prev,
-                [tableId]: prev[tableId].filter(schedule => schedule.day !== day || !schedule.range.includes(time))
-              }))}
-            />
+            <ScheduleDndProvider>
+              <ScheduleTable
+                key={`schedule-table-${index}`}
+                schedules={schedules}
+                tableId={tableId}
+                onScheduleTimeClick={(timeInfo) => setSearchInfo({ tableId, ...timeInfo })}
+                // TODO: setSchedulesMap 때문에 리렌더링이 빈번하게 발생됨.
+                // 이를 분리해야함.
+                // 분리한 뒤 메모이제이션을 씌워주면 최적화가 가능함.
+                onDeleteButtonClick={({ day, time }) => setSchedulesMap((prev) => ({
+                  ...prev,
+                  [tableId]: prev[tableId].filter(schedule => schedule.day !== day || !schedule.range.includes(time))
+                }))}
+              />
+            </ScheduleDndProvider>
           </Stack>
         ))}
       </Flex>
