@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -51,6 +51,10 @@ interface SearchOption {
   times: number[],
   majors: string[],
   credits?: number,
+}
+
+interface NormalizedLecture extends Lecture {
+  schedules: { day: string; range: number[]; room?: string; }[];
 }
 
 const TIME_SLOTS = [
@@ -112,19 +116,64 @@ const fetchAllLectures = () => {
   return { fetchAll };
 }
 
-// TODO: 이 컴포넌트에서 불필요한 연산이 발생하지 않도록 다양한 방식으로 시도해주세요.
-// 지금은 렌더링을 할 때 마다 (인피니트 스크롤을 할 때 마다) 검색을 다시 하고 있습니다. 
-// 최초에 한 번 검색한 이후에는 검색을 다시 하지 않도록 만들어주세요
-  // 1. 최초 로딩 때, 파싱/정규화까지 끝내두기 (비싼 연산을 한 번만)
-  // 2. 필터링 결과는 useMemo(…, [lectures, searchOptions])로 메모이즈
-  // 3. 페이지 증가로 인한 리렌더에서는 filteredLectures 재계산이 없도록 분리
-  // 4. IntersectionObserver는 once-setup로 두고, 마지막 페이지는 ref로 읽기
+const getFilteredLectures = (lectures: NormalizedLecture[], searchOptions: SearchOption) => {
+  const { query = '', credits, grades, days, times, majors } = searchOptions;
+  return lectures
+    .filter(lecture =>
+      lecture.title.toLowerCase().includes(query.toLowerCase()) ||
+      lecture.id.toLowerCase().includes(query.toLowerCase())
+    )
+    .filter(lecture => grades.length === 0 || grades.includes(lecture.grade))
+    .filter(lecture => majors.length === 0 || majors.includes(lecture.major))
+    .filter(lecture => !credits || lecture.credits.startsWith(String(credits)))
+    .filter(lecture => {
+      if (days.length === 0) {
+        return true;
+      }
+      return lecture.schedules.some(s => days.includes(s.day));
+    })
+    .filter(lecture => {
+      if (times.length === 0) {
+        return true;
+      }
+      return lecture.schedules.some(s => s.range.some(time => times.includes(time)));
+    });
+}
+
+const LectureRow = memo(({ lecture, onAdd }: { lecture: NormalizedLecture, onAdd: (lecture: NormalizedLecture) => void }) => {
+  return (
+    <Tr>
+      <Td width="100px">{lecture.id}</Td>
+      <Td width="50px">{lecture.grade}</Td>
+      <Td width="200px">{lecture.title}</Td>
+      <Td width="50px">{lecture.credits}</Td>
+      <Td width="150px" dangerouslySetInnerHTML={{ __html: lecture.major }}/>
+      <Td width="150px">
+        {lecture.schedules.map(s => `${s.day}(${s.range.join(',')})`).join(', ')}
+      </Td>
+      <Td width="80px">
+        <Button size="sm" colorScheme="green" onClick={() => onAdd(lecture)}>추가</Button>
+      </Td>
+    </Tr>
+  );
+});
+
+const MajorMenuItem = memo(({ major, isChecked }: { major: string, isChecked: boolean }) => {
+  return (
+    <Box>
+      <Checkbox isChecked={isChecked} size="sm" value={major}>
+        {major.replace(/<p>/gi, ' ')}
+      </Checkbox>
+    </Box>
+  );
+});
+
 const SearchDialog = ({ searchInfo, onClose }: Props) => {
   const { setSchedulesMap } = useScheduleContext();
 
   const loaderWrapperRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
-  const [lectures, setLectures] = useState<Lecture[]>([]);
+  const [lectures, setLectures] = useState<NormalizedLecture[]>([]);
   const [page, setPage] = useState(1);
   const [searchOptions, setSearchOptions] = useState<SearchOption>({
     query: '',
@@ -134,33 +183,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
     majors: [],
   });
 
-  const getFilteredLectures = () => {
-    const { query = '', credits, grades, days, times, majors } = searchOptions;
-    return lectures
-      .filter(lecture =>
-        lecture.title.toLowerCase().includes(query.toLowerCase()) ||
-        lecture.id.toLowerCase().includes(query.toLowerCase())
-      )
-      .filter(lecture => grades.length === 0 || grades.includes(lecture.grade))
-      .filter(lecture => majors.length === 0 || majors.includes(lecture.major))
-      .filter(lecture => !credits || lecture.credits.startsWith(String(credits)))
-      .filter(lecture => {
-        if (days.length === 0) {
-          return true;
-        }
-        const schedules = lecture.schedule ? parseSchedule(lecture.schedule) : [];
-        return schedules.some(s => days.includes(s.day));
-      })
-      .filter(lecture => {
-        if (times.length === 0) {
-          return true;
-        }
-        const schedules = lecture.schedule ? parseSchedule(lecture.schedule) : [];
-        return schedules.some(s => s.range.some(time => times.includes(time)));
-      });
-  }
-
-  const filteredLectures = useMemo(() => getFilteredLectures(), [lectures, searchOptions]);
+  const filteredLectures = useMemo(() => getFilteredLectures(lectures, searchOptions), [lectures, searchOptions]);
   const lastPage = Math.ceil(filteredLectures.length / PAGE_SIZE);
   const lastPageRef = useRef(lastPage);
   useEffect(() => {
@@ -169,18 +192,18 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
   const visibleLectures = useMemo(() => filteredLectures.slice(0, page * PAGE_SIZE), [filteredLectures, page]);
   const allMajors = useMemo(() => [...new Set(lectures.map(lecture => lecture.major))], [lectures]);
 
-  const changeSearchOption = (field: keyof SearchOption, value: SearchOption[typeof field]) => {
+  const changeSearchOption = useCallback((field: keyof SearchOption, value: SearchOption[typeof field]) => {
     setPage(1);
-    setSearchOptions(({ ...searchOptions, [field]: value }));
+    setSearchOptions((searchOptions) => ({ ...searchOptions, [field]: value }));
     loaderWrapperRef.current?.scrollTo(0, 0);
-  };
+  }, []);
 
-  const addSchedule = (lecture: Lecture) => {
+  const addSchedule = useCallback((lecture: NormalizedLecture) => {
     if (!searchInfo) return;
 
     const { tableId } = searchInfo;
 
-    const schedules = parseSchedule(lecture.schedule).map(schedule => ({
+    const schedules = lecture.schedules.map(schedule => ({
       ...schedule,
       lecture
     }));
@@ -191,7 +214,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
     }));
 
     onClose();
-  };allMajors
+  }, [searchInfo, setSchedulesMap, onClose]);
 
   useEffect(() => {
     const start = performance.now();
@@ -202,7 +225,11 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
       const end = performance.now();
       console.log('모든 API 호출 완료 ', end)
       console.log('API 호출에 걸린 시간(ms): ', end - start)
-      setLectures(results.flatMap(result => result.data));
+      const normalizedLectures = results.flatMap(result => result.data).map(lecture => ({
+        ...lecture,
+        schedules: lecture.schedule ? parseSchedule(lecture.schedule) : [],
+      }));
+      setLectures(normalizedLectures);
     })
   }, []);
 
@@ -214,9 +241,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
       return;
     }
 
-    // 브라우저 API
     const observer = new IntersectionObserver(
-      // 콜백 함수가 entries라는 인자로 현재 관찰 중인 요소들의 상태를 알려준다.
       entries => {
         if (entries[0].isIntersecting) {
           setPage(prevPage => Math.min(lastPageRef.current, prevPage + 1));
@@ -265,7 +290,7 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
                 <FormLabel>학점</FormLabel>
                 <Select
                   value={searchOptions.credits}
-                  onChange={(e) => changeSearchOption('credits', e.target.value)}
+                  onChange={(e) => changeSearchOption('credits', Number(e.target.value))}
                 >
                   <option value="">전체</option>
                   <option value="1">1학점</option>
@@ -354,11 +379,11 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
                   <Stack spacing={2} overflowY="auto" h="100px" border="1px solid" borderColor="gray.200"
                          borderRadius={5} p={2}>
                     {allMajors.map(major => (
-                      <Box key={major}>
-                        <Checkbox key={major} size="sm" value={major}>
-                          {major.replace(/<p>/gi, ' ')}
-                        </Checkbox>
-                      </Box>
+                      <MajorMenuItem
+                        key={major}
+                        major={major}
+                        isChecked={searchOptions.majors.includes(major)}
+                      />
                     ))}
                   </Stack>
                 </CheckboxGroup>
@@ -385,18 +410,12 @@ const SearchDialog = ({ searchInfo, onClose }: Props) => {
               <Box overflowY="auto" maxH="500px" ref={loaderWrapperRef}>
                 <Table size="sm" variant="striped">
                   <Tbody>
-                    {visibleLectures.map((lecture, index) => (
-                      <Tr key={`${lecture.id}-${index}`}>
-                        <Td width="100px">{lecture.id}</Td>
-                        <Td width="50px">{lecture.grade}</Td>
-                        <Td width="200px">{lecture.title}</Td>
-                        <Td width="50px">{lecture.credits}</Td>
-                        <Td width="150px" dangerouslySetInnerHTML={{ __html: lecture.major }}/>
-                        <Td width="150px" dangerouslySetInnerHTML={{ __html: lecture.schedule }}/>
-                        <Td width="80px">
-                          <Button size="sm" colorScheme="green" onClick={() => addSchedule(lecture)}>추가</Button>
-                        </Td>
-                      </Tr>
+                    {visibleLectures.map((lecture) => (
+                      <LectureRow
+                        key={lecture.id}
+                        lecture={lecture}
+                        onAdd={addSchedule}
+                      />
                     ))}
                   </Tbody>
                 </Table>
