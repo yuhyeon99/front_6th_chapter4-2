@@ -29,7 +29,7 @@ import {
   VStack,
   Wrap,
 } from "@chakra-ui/react";
-import { useScheduleContext } from "./ScheduleContext.tsx";
+import { useSetSchedulesMap } from "./ScheduleContext.tsx";
 import { Lecture } from "./types.ts";
 import { parseSchedule } from "./utils.ts";
 import axios, { AxiosResponse } from "axios";
@@ -169,7 +169,7 @@ const MajorMenuItem = memo(({ major, isChecked }: { major: string, isChecked: bo
 });
 
 const SearchDialog = ({ searchInfo, onClose }: Props) => {
-  const { setSchedulesMap } = useScheduleContext();
+  const setSchedulesMap = useSetSchedulesMap();
 
   const loaderWrapperRef = useRef<HTMLDivElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);

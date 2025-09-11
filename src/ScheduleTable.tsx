@@ -17,13 +17,13 @@ import { Schedule } from "./types.ts";
 import { fill2, parseHnM } from "./utils.ts";
 import { useDndContext, useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { ComponentProps, Fragment, memo } from "react";
+import { ComponentProps, Fragment, memo, useCallback } from "react";
 
 interface Props {
   tableId: string;
   schedules: Schedule[];
-  onScheduleTimeClick?: (timeInfo: { day: string, time: number }) => void;
-  onDeleteButtonClick?: (timeInfo: { day: string, time: number }) => void;
+  onScheduleTimeClick?: (tableId: string, timeInfo: { day: string, time: number }) => void;
+  onDeleteButtonClick?: (tableId: string, timeInfo: { day: string, time: number }) => void;
 }
 
 const TIMES = [
@@ -37,6 +37,68 @@ const TIMES = [
     .map((v, k) => v + k * 55 * 분)
     .map((v) => `${parseHnM(v)}~${parseHnM(v + 50 * 분)}`),
 ] as const;
+
+const ScheduleGridHeader = memo(() => {
+  return (
+    <>
+      <GridItem key="교시" borderColor="gray.300" bg="gray.100">
+        <Flex justifyContent="center" alignItems="center" h="full" w="full">
+          <Text fontWeight="bold">교시</Text>
+        </Flex>
+      </GridItem>
+      {DAY_LABELS.map((day) => (
+        <GridItem key={day} borderLeft="1px" borderColor="gray.300" bg="gray.100">
+          <Flex justifyContent="center" alignItems="center" h="full">
+            <Text fontWeight="bold">{day}</Text>
+          </Flex>
+        </GridItem>
+      ))}
+    </>
+  )
+});
+
+const MemoizedTimeLabelCell = memo(({
+  timeIndex,
+  time,
+  ...props
+}: ComponentProps<typeof GridItem> & { timeIndex: number, time: string }) => {
+  return (
+    <GridItem
+      borderTop="1px solid"
+      borderColor="gray.300"
+      bg={timeIndex > 17 ? 'gray.200' : 'gray.100'}
+      {...props}
+    >
+      <Flex justifyContent="center" alignItems="center" h="full">
+        <Text fontSize="xs">{fill2(timeIndex + 1)} ({time})</Text>
+      </Flex>
+    </GridItem>
+  )
+});
+
+const MemoizedGridCell = memo(({
+  tableId,
+  day,
+  timeIndex,
+  onScheduleTimeClick,
+  ...props
+}: ComponentProps<typeof GridItem> & { tableId: string, day: string, timeIndex: number, onScheduleTimeClick?: Props['onScheduleTimeClick'] }) => {
+  const handleClick = useCallback(() => {
+    onScheduleTimeClick?.(tableId, { day, time: timeIndex + 1 });
+  }, [tableId, day, timeIndex, onScheduleTimeClick]);
+
+  return (
+    <GridItem
+      borderWidth="1px 0 0 1px"
+      borderColor="gray.300"
+      bg={timeIndex > 17 ? 'gray.100' : 'white'}
+      cursor="pointer"
+      _hover={{ bg: 'yellow.100' }}
+      onClick={handleClick}
+      {...props}
+    />
+  )
+});
 
 const ScheduleTableInner = memo(({ tableId, schedules, onScheduleTimeClick, onDeleteButtonClick }: Props) => {
   const getColor = (lectureId: string): string => {
@@ -56,38 +118,17 @@ const ScheduleTableInner = memo(({ tableId, schedules, onScheduleTimeClick, onDe
         outline="1px solid"
         outlineColor="gray.300"
       >
-        <GridItem key="교시" borderColor="gray.300" bg="gray.100">
-          <Flex justifyContent="center" alignItems="center" h="full" w="full">
-            <Text fontWeight="bold">교시</Text>
-          </Flex>
-        </GridItem>
-        {DAY_LABELS.map((day) => (
-          <GridItem key={day} borderLeft="1px" borderColor="gray.300" bg="gray.100">
-            <Flex justifyContent="center" alignItems="center" h="full">
-              <Text fontWeight="bold">{day}</Text>
-            </Flex>
-          </GridItem>
-        ))}
+        <ScheduleGridHeader />
         {TIMES.map((time, timeIndex) => (
           <Fragment key={`시간-${timeIndex + 1}`}>
-            <GridItem
-              borderTop="1px solid"
-              borderColor="gray.300"
-              bg={timeIndex > 17 ? 'gray.200' : 'gray.100'}
-            >
-              <Flex justifyContent="center" alignItems="center" h="full">
-                <Text fontSize="xs">{fill2(timeIndex + 1)} ({time})</Text>
-              </Flex>
-            </GridItem>
+            <MemoizedTimeLabelCell time={time} timeIndex={timeIndex}/>
             {DAY_LABELS.map((day) => (
-              <GridItem
+              <MemoizedGridCell
                 key={`${day}-${timeIndex + 2}`}
-                borderWidth="1px 0 0 1px"
-                borderColor="gray.300"
-                bg={timeIndex > 17 ? 'gray.100' : 'white'}
-                cursor="pointer"
-                _hover={{ bg: 'yellow.100' }}
-                onClick={() => onScheduleTimeClick?.({ day, time: timeIndex + 1 })}
+                tableId={tableId}
+                day={day}
+                timeIndex={timeIndex}
+                onScheduleTimeClick={onScheduleTimeClick}
               />
             ))}
           </Fragment>
@@ -100,10 +141,8 @@ const ScheduleTableInner = memo(({ tableId, schedules, onScheduleTimeClick, onDe
           id={`${tableId}:${index}`}
           data={schedule}
           bg={getColor(schedule.lecture.id)}
-          onDeleteButtonClick={() => onDeleteButtonClick?.({
-            day: schedule.day,
-            time: schedule.range[0],
-          })}
+          tableId={tableId}
+          onDeleteButtonClick={onDeleteButtonClick}
         />
       ))}
     </>
@@ -139,15 +178,18 @@ const DraggableSchedule = memo(({
  id,
  data,
  bg,
+ tableId,
  onDeleteButtonClick
-}: { id: string; data: Schedule } & ComponentProps<typeof Box> & {
-  onDeleteButtonClick: () => void
-}) => {
+}: { id: string; data: Schedule, tableId: string, onDeleteButtonClick?: Props['onDeleteButtonClick'] } & ComponentProps<typeof Box>) => {
   const { day, range, room, lecture } = data;
   const { attributes, setNodeRef, listeners, transform } = useDraggable({ id });
   const leftIndex = DAY_LABELS.indexOf(day as typeof DAY_LABELS[number]);
   const topIndex = range[0] - 1;
   const size = range.length;
+
+  const handleDeleteButtonClick = useCallback(() => {
+    onDeleteButtonClick?.(tableId, { day, time: range[0] });
+  }, [day, onDeleteButtonClick, range, tableId]);
 
   return (
     <Popover>
@@ -176,7 +218,7 @@ const DraggableSchedule = memo(({
         <PopoverCloseButton/>
         <PopoverBody>
           <Text>강의를 삭제하시겠습니까?</Text>
-          <Button colorScheme="red" size="xs" onClick={onDeleteButtonClick}>
+          <Button colorScheme="red" size="xs" onClick={handleDeleteButtonClick}>
             삭제
           </Button>
         </PopoverBody>
