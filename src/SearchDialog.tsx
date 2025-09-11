@@ -86,8 +86,8 @@ const TIME_SLOTS = [
 
 const PAGE_SIZE = 100;
 
-const fetchMajors = () => axios.get<Lecture[]>('/schedules-majors.json');
-const fetchLiberalArts = () => axios.get<Lecture[]>('/schedules-liberal-arts.json');
+const fetchMajors = () => axios.get<Lecture[]>(`${import.meta.env.BASE_URL}schedules-majors.json`);
+const fetchLiberalArts = () => axios.get<Lecture[]>(`${import.meta.env.BASE_URL}schedules-liberal-arts.json`);
 
 const fetchAllLectures = () => {
 
